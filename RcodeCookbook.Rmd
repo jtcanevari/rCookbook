@@ -1,0 +1,247 @@
+---
+title: "R cookbook"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction 
+
+Este es un intento de compilar codigo de R util para manejo de datos, analisis y reporte.
+
+## Data manipulation 
+
+#### Read data in
+
+File type csv:
+
+```{r eval=FALSE}
+read.csv()
+```
+
+File type fasta:
+
+```{r eval=FALSE}
+library(seqinr)
+dat <- read.fasta(file = "genome_Feedlot.fasta", 
+           seqtype = c("DNA"), as.string = FALSE, forceDNAtolower = TRUE,
+           set.attributes = TRUE, legacy.mode = TRUE, seqonly = FALSE, strip.desc = FALSE,
+           bfa = FALSE, sizeof.longlong = .Machine$sizeof.longlong,
+           endian = .Platform$endian, apply.mask = TRUE)
+```
+
+File type fas:
+
+```{r eval=FALSE}
+library(ips)
+fas <- read.fas("dat.fas")
+```
+
+File type shp:
+
+```{r eval=FALSE}
+library(maptools)
+fas <- read.fas("dat.shp")
+```
+
+
+#### Find nearest value in other table 
+
+Using package survival:
+
+```{r eval=FALSE}
+library(survival)
+index <- neardate(dat1$key, dat2$key, dat1$value1, dat2$value2, best = "prior",
+         nomatch = NA_integer_)
+dat1$nearestValue <- dat2$value2[index]
+
+```
+
+Using package data.table:
+
+https://stackoverflow.com/questions/33357341/data-table-join-on-id-and-date-key-but-want-closest-date-before-or-equal-to
+
+```{r eval=FALSE}
+library(data.table)
+setDT(dat)
+setDT(calv)
+calv$VID <- as.character(calv$VID)
+indx <- calv[dat, 
+             on = c(VID = "VID",
+                    calvDate = "test.date"), 
+             roll = Inf,
+             which = TRUE]
+dat[, KiddingDate := calv[indx,calvDate]]
+dat[, Lact := calv[indx,LactNo]]
+```
+
+#### Find duplicates
+
+Get a df with unique dat[2] & dat[3]
+```{r eval=FALSE}
+dat <- dat[!duplicated(dat[2:3]),] 
+```
+
+See duplicates in dat[2]
+```{r eval=FALSE}
+rep <- dat[duplicated(dat[2]) | duplicated(dat[2], fromLast=TRUE),] 
+```
+
+#### Only numbers in a vector
+
+```{r eval=FALSE}
+dat$VID <- gsub("[^0-9]", "", dat$VID)
+```
+
+#### Cut vector into sections
+
+```{r eval=FALSE}
+library(dplyr)
+breaks <- c(0,10,20,30,60,90,120,150,180,210,240,270,305)
+milk.dat <- milk.dat %>% mutate(dimCat = cut(dim, breaks=breaks, include.lowest=TRUE, labels = c(5,15,25,45,75,115,135,165,195,225,255,285)))
+```
+
+#### Change to long format
+
+```{r eval=FALSE}
+library(tidyr)
+dat1 <- gather(dat, name.of.new.class.column, name.of.new.value.column, columns want to include)
+```
+
+#### Separate columns
+
+```{r eval=FALSE}
+library(dplyr);library(tidyr)
+dat <- dat %>%
+  separate(A, c("A1", "A2"), "sep")
+```
+
+## Statistical Analysis
+
+### Descriptive statistics
+
+#### Histograms
+
+```{r eval=FALSE}
+library(ggplot2)
+# Frequency histogram of kidding events: 
+ggplot(calv, aes(x = calvDate)) + 
+  geom_histogram(binwidth = 1, colour = "dark blue", size = 1) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  xlab("Kidding date") + 
+  ylab("Number of kidding events") +
+  scale_x_date(date_breaks = "1 month",date_labels = "%B", limits = c(dmy("1/1/2015"),dmy("31/12/2015" )))
+```
+
+#### Boxplots
+
+#### Sumarize by group
+
+#### Two by two tables
+
+#### Correlation matrix
+
+
+### Hypothesis testing
+
+#### Kruskal-Wallis test
+
+The Kruskal-Wallis test by ranks, Kruskal-Wallis test (named after William Kruskal and W. Allen Wallis), or one-way ANOVA on ranks is a non-parametric method for testing whether samples originate from the same distribution. It is used for comparing two or more independent samples of equal or different sample sizes. It extends the Mann-Whitney U test when there are more than two groups. The parametric equivalent of the Kruskal-Wallis test is the one-way analysis of variance (ANOVA). A significant Kruskal-Wallis test indicates that at least one sample stochastically dominates one other sample. The test does not identify where this stochastic dominance occurs or for how many pairs of groups stochastic dominance obtains. For analyzing the specific sample pairs for stochastic dominance in post hoc testing, Dunn's test, pairwise Mann-Whitney tests without Bonferroni correction, or the more powerful but less well known Conover-Iman test are appropriate.
+
+Since it is a non-parametric method, the Kruskal-Wallis test does not assume a normal distribution of the residuals, unlike the analogous one-way analysis of variance. If the researcher can make the less stringent assumptions of an identically shaped and scaled distribution for all groups, except for any difference in medians, then the null hypothesis is that the medians of all groups are equal, and the alternative hypothesis is that at least one population median of one group is different from the population median of at least one other group.
+
+```{r eval=FALSE}
+kruskal.test(Value ~ Group, 
+             data = Data)
+```
+
+### Growth models
+
+Brody model
+```{r eval=FALSE}
+library(minpack.lm)
+brody = nlsLM(Weight ~ a*(1-b*(exp(-c*age))),
+                     start=list(a=90,
+                                b=3.0,
+                                c=0.05),
+                     data = dat)
+coef(brody)
+
+par(xaxs = 'i', yaxs = 'i')
+plot(Weight ~ age, data = dat,ylim=c(0,120), xlim=c(0,2000))
+lines(0:2000, 
+      predict(brody, 
+              newdata = data.frame(age = 0:2000)), col = 'green')
+```
+
+Gompertz model
+```{r eval=FALSE}
+gompertz = nlsLM(Weight ~ a*(1-b*(exp(-c*age))),
+              start=list(a=90,
+                         b=3.0,
+                         c=0.05),
+              data = dat)
+
+lines(0:2000, 
+      predict(gompertz, 
+              newdata = data.frame(age = 0:2000)), col = 'red')
+```
+
+### Lactation curve models
+
+Wood's model
+```{r eval=FALSE}
+# List goats 
+goat.id <- unique(prod$CowKey)
+
+# Create empty vector for model parameters
+a.par <- NULL
+b.par <- NULL
+c.par <- NULL
+cum.milk <- NULL
+
+# Run loop fitting Wood's curve
+for (i in 1:length(goat.id)) {
+  tmp <- prod[prod$CowKey == goat.id[i],]
+  if(nrow(tmp) > 5){
+    start.param <- coef(lm(log(HTLitreTot) ~ log(dim) + dim, data = tmp))
+    start.param[3] <- -start.param[3]
+    z <- nlsLM(HTLitreTot ~ a*dim^(b)*exp(-c*dim), data = tmp, start = list(a=start.param[1], b=start.param[2],c=start.param[3] ) ,
+               control = list(maxiter=200, warnOnly=TRUE))
+    a.par[i] <- coef(z)[1]
+    b.par[i] <- coef(z)[2]
+    c.par[i] <- coef(z)[3]
+    # doset <- seq(1,calv$lact.l[calv$CowKey == goat.id[i]],1)  #milk to dof date
+    doset <- seq(1,290,1)
+    cum.milk[i] <- sum(predict(z, newdata = data.frame(dim = doset)))} else {cum.milk[i] <- NA}
+}
+
+# Plot to check
+windows()
+par(mfrow=c(3,3)) 
+for (i in 1:9) {
+  tmp <- prod[prod$CowKey == goat.id[i],]
+  start.param <- coef(lm(log(HTLitreTot) ~ log(dim) + dim, data = tmp))
+  start.param[3] <- -start.param[3]
+  
+  z <- nlsLM(HTLitreTot ~ a*dim^(b)*exp(-c*dim), data = tmp, start = list(a=start.param[1], b=start.param[2],c=start.param[3] ) ,
+             control = list(maxiter=200, warnOnly=TRUE))
+  
+  xnew<-seq(0,305 ,0.1)
+  yhat <- predict(z, newdata = data.frame(dim = xnew))
+  plot(tmp$dim,tmp$HTLitreTot, ylim = c(0,5), xlim = c(0,305), main = paste("goat ID:", unique(tmp$CowKey), sep = ""), xlab = "DIM", ylab = "Milk yield (L)")
+  lines(yhat ~ xnew, col = "red")
+```
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
